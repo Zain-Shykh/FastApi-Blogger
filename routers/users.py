@@ -1,25 +1,28 @@
 from typing import Annotated
 from fastapi import FastAPI, HTTPException, status, Depends, APIRouter
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 import models
 from database import get_db
-from schemas import PostResponse, UserCreate, UserResponse, UserUpdate
-
+from schemas import PostResponse, UserCreate, UserPublic, UserUpdate, UserPrivate, Token
+from datetime import timedelta
+from fastapi.security import OAuth2PasswordRequestForm
+from auth import hash_password, verify_password, create_access_token, CurrentUser
+from config import settings
 router = APIRouter()
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserPrivate, status_code=status.HTTP_201_CREATED)
 async def create_user(user:UserCreate, db:Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select (models.User).where (models.User.username == user.username),)
+    result = await db.execute(select (models.User).where (func.lower(models.User.username) == user.username.lower()),)
 
     existing_user = result.scalars().first()
 
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username already exists")
     
-    result = await db.execute(select (models.User).where (models.User.email == user.email),)
+    result = await db.execute(select (models.User).where (func.lower(models.User.email) == user.email.lower()),)
 
     existing_email = result.scalars().first()
 
@@ -28,7 +31,8 @@ async def create_user(user:UserCreate, db:Annotated[AsyncSession, Depends(get_db
     
     new_user = models.User(
         username = user.username,
-        email = user.email
+        email = user.email.lower(),
+        password_hash = hash_password(user.password)
     )
 
     db.add(new_user)
@@ -37,34 +41,62 @@ async def create_user(user:UserCreate, db:Annotated[AsyncSession, Depends(get_db
 
     return new_user
 
-@router.patch("/{id}", response_model=UserResponse)
-async def update_user_partial(id: int, newUserData:UserUpdate, db:Annotated[AsyncSession, Depends(get_db)]):
+@router.post("/token", response_model=Token)
+async def login_for_access_token(form_data:Annotated[OAuth2PasswordRequestForm, Depends()], db:Annotated[AsyncSession, Depends(get_db)]):
+    # Look up for user by email (case - insensitive)
+    # Note: OAuth2PasswordRequestForm has a username field, but we will treat it as email for our authentication
+    result = await db.execute(select(models.User).where(func.lower(models.User.email) == form_data.username.lower()))
+    user = result.scalars().first()
+
+    # Verify user exists and password is correct
+    # Not reveal which one failed for security reasons
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid email or password", headers={"WWW-Authenticate": "Bearer"})
+    
+    # Create access token with user id as subject
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": str(user.id)}, expires_delta=access_token_expires)
+
+    return Token(access_token=access_token, token_type="bearer")
+
+@router.get("/me", response_model=UserPrivate)
+async def get_current_user(current_user: CurrentUser):
+    return current_user
+
+@router.patch("/{id}", response_model=UserPrivate)
+async def update_user_partial(id: int, newUserData:UserUpdate,current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
+    
+    if id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="you are not authorized to update this user")
+    
     result = await db.execute(select(models.User).where(models.User.id == id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"user with id: {id} was not found")
 
     if newUserData.username and newUserData.username != user.username:
-        result = await db.execute(select(models.User).where(models.User.username == newUserData.username))
+        result = await db.execute(select(models.User).where(func.lower(models.User.username) == newUserData.username.lower()))
         existing_user = result.scalars().first()
         if existing_user:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="username already exists")
         
-    if newUserData.email and newUserData.email != user.email:
-        result = await db.execute(select(models.User).where(models.User.email == newUserData.email))
+    if newUserData.email and newUserData.email.lower() != user.email.lower():
+        result = await db.execute(select(models.User).where(func.lower(models.User.email) == newUserData.email.lower()))
         existing_email = result.scalars().first()
         if existing_email:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email already exists")
 
     newData = newUserData.model_dump(exclude_unset=True)
     for field, value in newData.items():
+        if field == "email":
+            value = value.lower()
         setattr(user, field, value)
     
     await db.commit()
     await db.refresh(user)
     return user
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserPublic)
 async def get_user(userid:int, db:Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.User).where(models.User.id == userid),)
 
@@ -76,12 +108,16 @@ async def get_user(userid:int, db:Annotated[AsyncSession, Depends(get_db)]):
 
 
 @router.delete("/{userid}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(id:int, db:Annotated[AsyncSession, Depends(get_db)]):
+async def delete_user(id:int, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.User).where(models.User.id == id))
     user = result.scalars().first()
 
+    if id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="you are not authorized to delete this user")
+
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+
     
     await db.delete(user)
     await db.commit()
