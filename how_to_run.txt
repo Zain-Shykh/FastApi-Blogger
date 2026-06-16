@@ -1,0 +1,3 @@
+Terminal command to start backend server
+
+    fastapi dev main.py
