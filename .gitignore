@@ -1,2 +1,2 @@
-echo "myenv/" >> .gitignore
-echo "__pycache__/" >> .gitignore
+myenv/
+__pycache__/
