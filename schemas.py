@@ -46,3 +46,9 @@ class PostUpdate(BaseModel):
     content:str | None = Field(default=None, min_length=10)
 
 
+class PaginatedPostsResponse(BaseModel):
+    posts: list[PostResponse]
+    total: int
+    skip: int
+    limit: int
+    has_more: int
