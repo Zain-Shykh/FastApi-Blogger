@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 import models
-from database import get_db, engine, Base
+from database import get_db, engine
 from contextlib import asynccontextmanager
 from fastapi.exception_handlers import (http_exception_handler, request_validation_exception_handler)
 from fastapi.requests import Request
@@ -16,8 +16,6 @@ from routers import users, posts
 
 @asynccontextmanager
 async def lifespan(_app:FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()
 app = FastAPI(lifespan=lifespan)
