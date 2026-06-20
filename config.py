@@ -25,4 +25,10 @@ class Settings(BaseSettings):
 
     frontend_url: str = "http://localhost:8000"
 
+    s3_bucket_name: str
+    s3_region:str
+    s3_access_key_id: SecretStr
+    s3_secret_access_key: SecretStr
+    s3_endpoint_url: str | None = None
+
 settings = Settings()     # type: ignore[call-arg]  # loaded from .env file

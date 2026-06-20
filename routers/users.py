@@ -11,9 +11,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from auth import hash_password, verify_password, create_access_token, CurrentUser, generate_reset_token, hash_reset_token
 from config import settings
 from PIL import UnidentifiedImageError
-from imageutils import delete_profile_image, process_profile_image
+from imageutils import delete_profile_image, process_profile_image, upload_profile_image
 from starlette.concurrency import run_in_threadpool
 from email_utils import send_password_reset_email
+
+from botocore.exceptions import ClientError
 
 router = APIRouter()
 
@@ -201,7 +203,7 @@ async def delete_user(id:int, current_user:CurrentUser, db:Annotated[AsyncSessio
     await db.commit()
 
     if oldfilename:
-        delete_profile_image(oldfilename)
+        await delete_profile_image(oldfilename)
 
 
 @router.get("/{user_id}/posts", response_model=PaginatedPostsResponse)
@@ -242,11 +244,17 @@ async def upload_profile_picture(user_id:int, file:UploadFile, current_user:Curr
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file too large. Maximum size is {settings.max_upload_size_bytes} MB")
     
     try:
-        new_filename = await run_in_threadpool(process_profile_image, content)
+        processed_bytes, new_filename = await run_in_threadpool(process_profile_image, content)
 
     except UnidentifiedImageError as err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image file. Please Upload (Jpeg/PNG)") from err
     
+
+    try:
+        await upload_profile_image(processed_bytes, new_filename)
+    except ClientError as err:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to upload image. Please try again later.") from err
+
     old_filename = current_user.image_file
 
     current_user.image_file = new_filename
@@ -255,7 +263,7 @@ async def upload_profile_picture(user_id:int, file:UploadFile, current_user:Curr
     await db.refresh(current_user)
 
     if old_filename:
-        delete_profile_image(old_filename)
+        await delete_profile_image(old_filename)
 
     return current_user
     
@@ -276,7 +284,7 @@ async def delete_user_picture(user_id:int, current_user:CurrentUser, db:Annotate
     await db.commit()
     await db.refresh(current_user)
 
-    delete_profile_image(old_filename)
+    await delete_profile_image(old_filename)
 
     return current_user
 
