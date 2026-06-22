@@ -41,3 +41,11 @@ class PasswordResetToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     user: Mapped[User] = relationship(back_populates="reset_tokens")
+
+
+
+class Like(Base):
+    __tablename__ = "likes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, ondelete="CASCADE")
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("posts.id"), nullable=False, ondelete="CASCADE")
