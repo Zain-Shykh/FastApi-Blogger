@@ -12,8 +12,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     image_file: Mapped[str|None] = mapped_column(String(200), nullable=True, default=None)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
     posts: Mapped[list[Post]] = relationship(back_populates="author", cascade="all, delete-orphan")
     reset_tokens: Mapped[list[PasswordResetToken]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    likes: Mapped[list[Like]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    comments: Mapped[list[Comment]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     @property
     def image_path(self)->str:
@@ -29,9 +33,11 @@ class Post(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     date_posted: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    likes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    author: Mapped[User] = relationship(back_populates="posts")
 
+
+    author: Mapped[User] = relationship(back_populates="posts")
+    likes: Mapped[list[Like]] = relationship(back_populates="post")
+    comments: Mapped[list[Comment]] = relationship(back_populates="post")
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -40,6 +46,8 @@ class PasswordResetToken(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+
+
     user: Mapped[User] = relationship(back_populates="reset_tokens")
 
 
@@ -49,3 +57,22 @@ class Like(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, ondelete="CASCADE")
     post_id: Mapped[int] = mapped_column(Integer, ForeignKey("posts.id"), nullable=False, ondelete="CASCADE")
+
+    user: Mapped[User] = relationship(back_populates="likes")
+    post: Mapped[Post] = relationship(back_populates="likes")
+
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    date_posted: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("posts.id"), nullable=False, index=True)
+    parent_id: Mapped[int|None] = mapped_column(Integer, ForeignKey("comments.id"), nullable=True, index=True)
+
+    user: Mapped[User] = relationship(back_populates="comments")
+    post: Mapped[Post] = relationship(back_populates="comments")
+    replies: Mapped[list[Comment]] = relationship("Comment", back_populates="parent", cascade="all, delete-orphan")
+    parent: Mapped[Comment|None] = relationship("Comment", back_populates="replies", remote_side=[id])

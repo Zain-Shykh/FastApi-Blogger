@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 import models
 from database import get_db
-from schemas import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse
+from schemas import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse, CommentCreate, CommentResponse
 from auth import CurrentUser
 from config import settings
 
@@ -106,4 +106,74 @@ async def delete_post(id:int,current_user:CurrentUser, db:Annotated[AsyncSession
 
     await db.delete(post)
     await db.commit()
-        
+
+
+
+
+
+@router.post("/{id}/like", status_code=status.HTTP_200_OK)
+async def like_post(id:int, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Post).where(models.Post.id == id))
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="post not found")
+
+    like_result = await db.execute(select(models.Like).where(models.Like.post_id == id, models.Like.user_id == current_user.id))
+    existing_like = like_result.scalars().first()
+
+    if existing_like:
+        await db.delete(existing_like)
+        await db.commit()
+        return {"message": "post unliked successfully"}
+
+    new_like = models.Like(user_id=current_user.id, post_id=id)
+    db.add(new_like)
+    await db.commit()
+    return {"message": "post liked successfully"}
+
+
+@router.post("/{id}/comments", response_model=CommentResponse)
+async def create_comment(id: int, comment: CommentCreate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Post).where(models.Post.id == id))
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="post not found")
+
+    new_comment = models.Comment(content=comment.content, user_id=current_user.id, post_id=id)
+    db.add(new_comment)
+    await db.commit()
+    await db.refresh(new_comment, attribute_names=["user"])
+    return new_comment
+
+
+@router.delete("/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(post_id: int, comment_id: int, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Comment).where(models.Comment.id == comment_id and models.Comment.post_id == post_id))
+    comment = result.scalars().first()
+
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="comment not found")
+
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="you are not the owner of this comment")
+
+    await db.delete(comment)
+    await db.commit()
+
+
+@router.post("/{post_id}/comments/{comment_id}/replies", response_model=CommentResponse)
+async def create_reply(post_id: int, comment_id: int, reply: CommentCreate, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Comment).where(models.Comment.id == comment_id))
+    parent_comment = result.scalars().first()
+
+    if not parent_comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="parent comment not found")
+
+    new_reply = models.Comment(content=reply.content, user_id=current_user.id, post_id=post_id, parent_id=comment_id)
+    db.add(new_reply)
+    await db.commit()
+    await db.refresh(new_reply, attribute_names=["user"])
+    return new_reply
+

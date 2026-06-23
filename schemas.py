@@ -64,3 +64,17 @@ class ResetPasswordRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password:str
     new_password:str = Field(min_length=8)
+
+
+class CommentCreate(BaseModel):
+    content:str = Field(min_length=1, max_length=500)
+
+class CommentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id:int
+    content:str
+    date_posted:datetime
+    user:UserPublic
+    post_id:int
+    parent_id:int|None
+    replies:list["CommentResponse"] = []
