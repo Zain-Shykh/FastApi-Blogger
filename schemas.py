@@ -40,6 +40,7 @@ class PostResponse(PostBase):
     user_id:int
     date_posted:datetime
     author:UserPublic
+    image_path:str
 
 class PostUpdate(BaseModel):
     title:str | None = Field(default=None, min_length=1, max_length=100)

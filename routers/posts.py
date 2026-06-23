@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import FastAPI, HTTPException, status, Depends, APIRouter, Query
+from fastapi import FastAPI, HTTPException, status, Depends, APIRouter, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -8,6 +8,10 @@ from database import get_db
 from schemas import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse, CommentCreate, CommentResponse
 from auth import CurrentUser
 from config import settings
+from imageutils import delete_post_thumbnail, process_post_thumbnail, upload_post_thumbnail
+from starlette.concurrency import run_in_threadpool
+from botocore.exceptions import ClientError
+
 
 router = APIRouter()
 
@@ -108,7 +112,68 @@ async def delete_post(id:int,current_user:CurrentUser, db:Annotated[AsyncSession
     await db.commit()
 
 
+@router.patch("/{id}/image", response_model=PostResponse)
+async def upload_post_image(id:int, image_file:UploadFile, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(models.Post.id == id))
+    post = result.scalars().first()
 
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="post not found")
+
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="you are not the owner of this post")
+
+    content = await image_file.read()
+
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"image size exceeds the maximum limit of {settings.max_upload_size_bytes} bytes")
+
+    try:
+        processed_image, filename = await run_in_threadpool(process_post_thumbnail, content)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid image file")
+
+    try:
+        await upload_post_thumbnail(processed_image, filename)
+    except ClientError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="failed to upload image to S3") from e
+
+    old_file_name = post.image_file
+    post.image_file = filename
+
+    await db.commit()
+    await db.refresh(post, attribute_names=["author"])
+
+    if old_file_name:
+        await delete_post_thumbnail(old_file_name)
+    
+    return post
+
+
+@router.delete("/{id}/image", response_model=PostResponse)
+async def delete_post_image(id:int, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(models.Post.id == id))
+    post = result.scalars().first()
+
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="post not found")
+
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="you are not the owner of this post")
+
+    old_file_name = post.image_file
+    if old_file_name is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No picture to delete.")
+
+    post.image_file = None
+
+    await db.commit()
+    await db.refresh(post, attribute_names=["author"])
+
+    if old_file_name:
+        await delete_post_thumbnail(old_file_name)
+
+    return post
 
 
 @router.post("/{id}/like", status_code=status.HTTP_200_OK)

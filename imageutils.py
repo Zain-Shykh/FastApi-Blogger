@@ -32,6 +32,23 @@ def process_profile_image(content: bytes) ->tuple[bytes, str]:
 
     return output.read(), filename
 
+
+def process_post_thumbnail(content: bytes) -> tuple[bytes, str]:
+    with Image.open(BytesIO(content)) as original:
+        img = ImageOps.exif_transpose(original)
+        # Crop to a 16:9 cinematic aspect ratio instead of a square
+        img = ImageOps.fit(img, (800, 450), method=Image.Resampling.LANCZOS)
+        
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGB")
+            
+        filename = f"{uuid.uuid4().hex}.jpg"
+        output = BytesIO()
+        img.save(output, format="JPEG", quality=85, optimize=True)
+        output.seek(0)
+        
+    return output.read(), filename
+
 def _upload_to_s3(file_bytes:bytes, key:str) -> None:
     s3 = _get_s3_client()
     s3.upload_fileobj(BytesIO(file_bytes), settings.s3_bucket_name, key, ExtraArgs={"ContentType": "image/jpeg"})
@@ -50,4 +67,15 @@ async def delete_profile_image(filename:str | None) -> None:
         return
 
     key = f"profile_images/{filename}"
+    await run_in_threadpool(_delete_from_s3, key)
+
+async def upload_post_thumbnail(file_bytes:bytes, filename:str) -> None:
+    key = f"post/{filename}"
+    await run_in_threadpool(_upload_to_s3, file_bytes, key)
+
+async def delete_post_thumbnail(filename:str | None) -> None:
+    if filename is None:
+        return
+
+    key = f"post/{filename}"
     await run_in_threadpool(_delete_from_s3, key)

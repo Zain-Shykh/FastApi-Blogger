@@ -23,7 +23,7 @@ class User(Base):
     def image_path(self)->str:
         if self.image_file:
             return f"{settings.s3_endpoint_url}/storage/v1/object/public/{settings.s3_bucket_name}/{self.image_file}"
-        return "/static/profile_pics/default.jpg"
+        return "/media/profile_pics/default.jpg"
 
 
 class Post(Base):
@@ -33,11 +33,17 @@ class Post(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     date_posted: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-
+    image_file: Mapped[str|None] = mapped_column(String(200), nullable=True, default=None)
 
     author: Mapped[User] = relationship(back_populates="posts")
     likes: Mapped[list[Like]] = relationship(back_populates="post")
     comments: Mapped[list[Comment]] = relationship(back_populates="post")
+
+    @property
+    def image_path(self)->str:
+        if self.image_file:
+            return f"{settings.s3_endpoint_url}/storage/v1/object/public/{settings.s3_bucket_name}/{self.image_file}"
+        return "/media/thumbnails/default.jpg"
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
