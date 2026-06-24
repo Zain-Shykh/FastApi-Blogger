@@ -12,6 +12,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     image_file: Mapped[str|None] = mapped_column(String(200), nullable=True, default=None)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    is_admin: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 
     posts: Mapped[list[Post]] = relationship(back_populates="author", cascade="all, delete-orphan")
@@ -61,8 +62,8 @@ class PasswordResetToken(Base):
 class Like(Base):
     __tablename__ = "likes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, ondelete="CASCADE")
-    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("posts.id"), nullable=False, ondelete="CASCADE")
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id",  ondelete="CASCADE"), nullable=False)
+    post_id: Mapped[int] = mapped_column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False)
 
     user: Mapped[User] = relationship(back_populates="likes")
     post: Mapped[Post] = relationship(back_populates="likes")

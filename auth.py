@@ -68,8 +68,14 @@ async def get_current_user(token:Annotated[str, Depends(oauth2_scheme)], db:Anno
     return user
 
 
-CurrentUser = Annotated[models.User, Depends(get_current_user)]
+async def get_current_admin_user(current_user:Annotated[models.User, Depends(get_current_user)])->models.User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin privileges required")
+    return current_user
 
+
+CurrentUser = Annotated[models.User, Depends(get_current_user)]
+CurrentAdminUser = Annotated[models.User, Depends(get_current_admin_user)]
 
 
 

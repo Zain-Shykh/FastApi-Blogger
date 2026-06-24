@@ -62,7 +62,7 @@ async def login_for_access_token(form_data:Annotated[OAuth2PasswordRequestForm, 
     
     # Create access token with user id as subject
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": str(user.id)}, expires_delta=access_token_expires)
+    access_token = create_access_token(data={"sub": str(user.id), "is_admin": user.is_admin}, expires_delta=access_token_expires)
 
     return Token(access_token=access_token, token_type="bearer")
 
