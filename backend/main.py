@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, status, Depends, APIRouter
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from typing import Annotated
 from sqlalchemy import select
@@ -13,12 +14,21 @@ from contextlib import asynccontextmanager
 from fastapi.exception_handlers import (http_exception_handler, request_validation_exception_handler)
 from fastapi.requests import Request
 from routers import users, posts, admin
+from config import settings
 
 @asynccontextmanager
 async def lifespan(_app:FastAPI):
     yield
     await engine.dispose()
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_url],
+    allow_origin_regex=r"http://localhost:\d+",
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.mount("/media", StaticFiles(directory="media"), name="media")
 

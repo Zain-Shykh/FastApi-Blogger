@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { register } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import ErrorBanner from '../components/ErrorBanner'
+import Button from '../components/Button'
 
 export default function Register() {
   const { login } = useAuth()
@@ -32,8 +33,8 @@ export default function Register() {
 
   return (
     <div className="max-w-sm mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Create an account</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">Create an account</h1>
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
         <ErrorBanner message={error} />
         <div>
           <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-1">
@@ -78,13 +79,9 @@ export default function Register() {
           />
           <p className="mt-1 text-xs text-slate-400">At least 8 characters.</p>
         </div>
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full px-4 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
-        >
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? 'Creating account…' : 'Sign up'}
-        </button>
+        </Button>
       </form>
       <p className="mt-4 text-sm text-center">
         Already have an account?{' '}

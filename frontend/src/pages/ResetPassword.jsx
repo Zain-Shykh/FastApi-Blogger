@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { resetPassword } from '../api/auth'
 import ErrorBanner from '../components/ErrorBanner'
+import Button from '../components/Button'
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams()
@@ -31,8 +32,8 @@ export default function ResetPassword() {
 
   return (
     <div className="max-w-sm mx-auto">
-      <h1 className="text-2xl font-bold text-slate-900 mb-6">Reset password</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <h1 className="text-2xl font-bold text-slate-900 mb-6 text-center">Reset password</h1>
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
         <ErrorBanner message={error} />
         <div>
           <label htmlFor="new_password" className="block text-sm font-medium text-slate-700 mb-1">
@@ -48,13 +49,9 @@ export default function ResetPassword() {
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full px-4 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
-        >
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? 'Resetting…' : 'Reset password'}
-        </button>
+        </Button>
       </form>
     </div>
   )

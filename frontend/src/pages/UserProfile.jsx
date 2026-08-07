@@ -3,11 +3,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { getUser, getUserPosts } from '../api/auth'
 import { toggleUserRole, banUser } from '../api/admin'
 import { useAuth } from '../context/AuthContext'
-import { imageUrl } from '../api/client'
 import PostCard from '../components/PostCard'
 import Pagination from '../components/Pagination'
 import Spinner from '../components/Spinner'
 import ErrorBanner from '../components/ErrorBanner'
+import EmptyState from '../components/EmptyState'
+import Avatar from '../components/Avatar'
+import Button from '../components/Button'
 
 const LIMIT = 6
 
@@ -70,46 +72,46 @@ export default function UserProfile() {
 
   return (
     <div>
-      <div className="flex items-center gap-4">
-        <img
-          src={imageUrl(profile.image_path)}
-          alt=""
-          className="h-16 w-16 rounded-full object-cover bg-slate-200"
-          onError={(e) => {
-            e.currentTarget.style.visibility = 'hidden'
-          }}
-        />
+      <div className="rounded-lg border border-slate-200 bg-white p-6 flex items-center gap-5">
+        <Avatar user={profile} size="xl" />
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{profile.username}</h1>
-          <p className="text-sm text-slate-500">{isSelf ? profile.email : ''}</p>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            {profile.username}
+            {profile.is_admin && (
+              <span className="text-xs font-medium bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                admin
+              </span>
+            )}
+          </h1>
+          {isSelf && <p className="text-sm text-slate-500">{profile.email}</p>}
+          {posts && <p className="mt-1 text-sm text-slate-400">{posts.total} post{posts.total === 1 ? '' : 's'}</p>}
         </div>
       </div>
 
       {isAdminViewer && (
-        <div className="mt-4 p-3 rounded-md bg-amber-50 border border-amber-200">
+        <div className="mt-4 p-4 rounded-lg bg-amber-50 border border-amber-200">
           <p className="text-xs font-medium text-amber-800 mb-2">Admin actions</p>
           <ErrorBanner message={actionError} />
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleToggleRole}
-              className="px-3 py-1.5 rounded-md border border-amber-300 text-sm text-amber-800 hover:bg-amber-100"
-            >
+            <Button variant="warning" size="sm" onClick={handleToggleRole}>
               {profile.is_admin ? 'Revoke admin' : 'Make admin'}
-            </button>
-            <button
-              type="button"
-              onClick={handleBan}
-              className="px-3 py-1.5 rounded-md border border-red-300 text-sm text-red-700 hover:bg-red-50"
-            >
+            </Button>
+            <Button variant="danger" size="sm" onClick={handleBan}>
               Ban user
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       <h2 className="mt-8 text-lg font-semibold text-slate-900 mb-4">Posts</h2>
-      {posts && posts.posts.length === 0 && <p className="text-slate-500">No posts yet.</p>}
+      {posts && posts.posts.length === 0 && (
+        <EmptyState
+          icon="📝"
+          title="No posts yet"
+          description={isSelf ? "You haven't published anything yet." : `${profile.username} hasn't published anything yet.`}
+          action={isSelf && <Button to="/posts/new">Write a post</Button>}
+        />
+      )}
       {posts && posts.posts.length > 0 && (
         <>
           <div className="grid sm:grid-cols-2 gap-4">

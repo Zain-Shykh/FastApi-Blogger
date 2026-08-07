@@ -42,6 +42,7 @@ class PostResponse(PostBase):
     date_posted:datetime
     author:UserPublic
     image_path:str
+    image_file:str|None = None
     likes_count:int = 0
     comments_count:int = 0
     is_liked_by_me:bool = False
@@ -83,3 +84,20 @@ class CommentResponse(BaseModel):
     post_id:int
     parent_id:int|None
     replies:list["CommentResponse"] = []
+
+
+class AdminUserSummary(BaseModel):
+    id:int
+    username:str
+    email:EmailStr
+    image_path:str
+    is_admin:bool
+    post_count:int
+
+
+class PaginatedUsersResponse(BaseModel):
+    users:list[AdminUserSummary]
+    total:int
+    skip:int
+    limit:int
+    has_more:bool

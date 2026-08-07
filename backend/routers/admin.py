@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 import models
 from database import get_db
 from auth import CurrentAdminUser
-from schemas import PostResponse, UserPublic  # Ensure these are correctly imported from your schemas file
+from schemas import PostResponse, UserPublic, AdminUserSummary, PaginatedUsersResponse  # Ensure these are correctly imported from your schemas file
 from imageutils import delete_post_thumbnail
 
 router = APIRouter(prefix="/admin", tags=["Admin Management"])
@@ -79,6 +79,51 @@ async def get_top_posts(
 # ==========================================
 # 2. USER MODERATION & PRIVILEGES
 # ==========================================
+
+@router.get("/users", response_model=PaginatedUsersResponse)
+async def list_users(
+    current_admin: CurrentAdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    """
+    Paginated list of every platform user, for moderation, with each user's post count.
+    """
+    count_result = await db.execute(select(func.count(models.User.id)))
+    total = count_result.scalar() or 0
+
+    query = (
+        select(models.User, func.count(models.Post.id).label("post_count"))
+        .outerjoin(models.Post, models.Post.user_id == models.User.id)
+        .group_by(models.User.id)
+        .order_by(models.User.id.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    rows = result.all()
+
+    users = [
+        AdminUserSummary(
+            id=user.id,
+            username=user.username,
+            email=user.email,
+            image_path=user.image_path,
+            is_admin=user.is_admin,
+            post_count=post_count,
+        )
+        for user, post_count in rows
+    ]
+
+    return PaginatedUsersResponse(
+        users=users,
+        total=total,
+        skip=skip,
+        limit=limit,
+        has_more=skip + len(users) < total,
+    )
+
 
 @router.patch("/users/{user_id}/role", response_model=UserPublic)
 async def toggle_user_admin_privilege(

@@ -43,24 +43,28 @@ export default function PostEdit() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="max-w-2xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">
-        {location.state?.justCreated ? 'Add a thumbnail (optional)' : 'Edit post'}
+        {location.state?.justCreated ? '🎉 Post published — add a thumbnail?' : 'Edit post'}
       </h1>
 
-      <ImageUploader
-        currentImageUrl={post.image_path ? imageUrl(post.image_path) : null}
-        label="Thumbnail"
-        onUpload={async (file) => setPost(await uploadPostImage(id, token, file))}
-        onRemove={async () => setPost(await deletePostImage(id, token))}
-      />
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <ImageUploader
+          currentImageUrl={post.image_file ? imageUrl(post.image_path) : null}
+          label="Thumbnail"
+          onUpload={async (file) => setPost(await uploadPostImage(id, token, file))}
+          onRemove={async () => setPost(await deletePostImage(id, token))}
+        />
+      </div>
 
-      <PostForm
-        initialTitle={post.title}
-        initialContent={post.content}
-        onSubmit={handleSubmit}
-        submitLabel="Save changes"
-      />
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <PostForm
+          initialTitle={post.title}
+          initialContent={post.content}
+          onSubmit={handleSubmit}
+          submitLabel="Save changes"
+        />
+      </div>
     </div>
   )
 }

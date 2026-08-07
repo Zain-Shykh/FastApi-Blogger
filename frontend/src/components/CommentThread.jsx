@@ -5,6 +5,7 @@ import { createReply, deleteComment } from '../api/posts'
 import { deleteCommentAsAdmin } from '../api/admin'
 import CommentForm from './CommentForm'
 import ErrorBanner from './ErrorBanner'
+import Avatar from './Avatar'
 
 function CommentItem({ comment, postId, onChanged, depth = 0 }) {
   const { user, token } = useAuth()
@@ -35,43 +36,48 @@ function CommentItem({ comment, postId, onChanged, depth = 0 }) {
   }
 
   return (
-    <div className={depth > 0 ? 'pl-6 border-l border-slate-200' : ''}>
-      <div className="py-3">
-        <ErrorBanner message={error} />
-        <div className="flex items-center gap-2 text-sm">
-          <Link to={`/users/${comment.user.id}`} className="font-medium text-slate-900 hover:text-brand-700">
-            {comment.user.username}
-          </Link>
-          <span className="text-slate-400">{new Date(comment.date_posted).toLocaleString()}</span>
-        </div>
-        <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{comment.content}</p>
-        <div className="mt-1 flex items-center gap-3 text-xs">
-          {user && (
-            <button
-              type="button"
-              onClick={() => setReplying((v) => !v)}
-              className="text-slate-500 hover:text-brand-700 font-medium"
-            >
-              Reply
-            </button>
-          )}
-          {(isOwner || canAdminDelete) && (
-            <button type="button" onClick={handleDelete} className="text-red-500 hover:text-red-700 font-medium">
-              Delete
-            </button>
-          )}
-        </div>
-        {replying && (
-          <div className="mt-2">
-            <CommentForm
-              onSubmit={handleReply}
-              placeholder={`Reply to ${comment.user.username}…`}
-              submitLabel="Reply"
-              autoFocus
-              onCancel={() => setReplying(false)}
-            />
+    <div className={depth > 0 ? 'pl-4 sm:pl-10 border-l border-slate-200' : ''}>
+      <div className="py-3 flex gap-3">
+        <Link to={`/users/${comment.user.id}`} className="shrink-0">
+          <Avatar user={comment.user} size="sm" />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <ErrorBanner message={error} />
+          <div className="flex items-center gap-2 text-sm">
+            <Link to={`/users/${comment.user.id}`} className="font-medium text-slate-900 hover:text-brand-700">
+              {comment.user.username}
+            </Link>
+            <span className="text-slate-400">{new Date(comment.date_posted).toLocaleString()}</span>
           </div>
-        )}
+          <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">{comment.content}</p>
+          <div className="mt-1 flex items-center gap-3 text-xs">
+            {user && (
+              <button
+                type="button"
+                onClick={() => setReplying((v) => !v)}
+                className="text-slate-500 hover:text-brand-700 font-medium"
+              >
+                Reply
+              </button>
+            )}
+            {(isOwner || canAdminDelete) && (
+              <button type="button" onClick={handleDelete} className="text-red-500 hover:text-red-700 font-medium">
+                Delete
+              </button>
+            )}
+          </div>
+          {replying && (
+            <div className="mt-2">
+              <CommentForm
+                onSubmit={handleReply}
+                placeholder={`Reply to ${comment.user.username}…`}
+                submitLabel="Reply"
+                autoFocus
+                onCancel={() => setReplying(false)}
+              />
+            </div>
+          )}
+        </div>
       </div>
       {comment.replies?.length > 0 && (
         <div>

@@ -9,6 +9,8 @@ import CommentForm from '../components/CommentForm'
 import CommentThread from '../components/CommentThread'
 import Spinner from '../components/Spinner'
 import ErrorBanner from '../components/ErrorBanner'
+import Avatar from '../components/Avatar'
+import Button from '../components/Button'
 
 export default function PostDetail() {
   const { id } = useParams()
@@ -65,54 +67,39 @@ export default function PostDetail() {
 
   return (
     <article>
-      {post.image_path && (
-        <img
-          src={imageUrl(post.image_path)}
-          alt=""
-          className="w-full max-h-96 object-cover rounded-lg mb-6"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-          }}
-        />
+      {post.image_file && (
+        <img src={imageUrl(post.image_path)} alt="" className="w-full max-h-96 object-cover rounded-lg mb-6" />
       )}
       <div className="flex items-start justify-between gap-4">
         <h1 className="text-3xl font-bold text-slate-900">{post.title}</h1>
         {(isOwner || canAdminDelete) && (
           <div className="flex gap-2 shrink-0">
             {isOwner && (
-              <Link
-                to={`/posts/${post.id}/edit`}
-                className="px-3 py-1.5 rounded-md border border-slate-300 text-sm hover:bg-slate-100"
-              >
+              <Button to={`/posts/${post.id}/edit`} variant="secondary" size="sm">
                 Edit
-              </Link>
+              </Button>
             )}
-            <button
-              type="button"
-              onClick={handleDeletePost}
-              className="px-3 py-1.5 rounded-md border border-red-200 text-red-600 text-sm hover:bg-red-50"
-            >
+            <Button variant="danger" size="sm" onClick={handleDeletePost}>
               Delete
-            </button>
+            </Button>
           </div>
         )}
       </div>
-      <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+      <Link to={`/users/${post.author.id}`} className="mt-3 flex items-center gap-2 group w-fit">
+        <Avatar user={post.author} size="sm" />
         <span>
-          by{' '}
-          <Link to={`/users/${post.author.id}`} className="font-medium text-slate-700 hover:text-brand-700">
+          <span className="block text-sm font-medium text-slate-700 group-hover:text-brand-700">
             {post.author.username}
-          </Link>
+          </span>
+          <span className="block text-xs text-slate-400">{new Date(post.date_posted).toLocaleString()}</span>
         </span>
-        <span>·</span>
-        <span>{new Date(post.date_posted).toLocaleString()}</span>
-      </div>
+      </Link>
       <div className="prose prose-slate mt-6 whitespace-pre-wrap text-slate-800 leading-relaxed">
         {post.content}
       </div>
       <div className="mt-6 flex items-center gap-3">
         <LikeButton post={post} onChange={(patch) => setPost((p) => ({ ...p, ...patch }))} />
-        <span className="text-sm text-slate-500">{post.comments_count} comments</span>
+        <span className="text-sm text-slate-500">💬 {post.comments_count} comments</span>
       </div>
 
       <section className="mt-8 border-t border-slate-200 pt-6">

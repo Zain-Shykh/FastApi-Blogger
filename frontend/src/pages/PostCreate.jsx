@@ -15,7 +15,9 @@ export default function PostCreate() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-slate-900 mb-6">New post</h1>
-      <PostForm onSubmit={handleSubmit} submitLabel="Publish" />
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <PostForm onSubmit={handleSubmit} submitLabel="Publish" />
+      </div>
     </div>
   )
 }

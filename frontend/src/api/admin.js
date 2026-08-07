@@ -8,6 +8,10 @@ export function getTopPosts(token, limit = 5) {
   return request(`/admin/engagement/top-posts?limit=${limit}`, { token })
 }
 
+export function listUsers(token, { skip = 0, limit = 20 } = {}) {
+  return request(`/admin/users?skip=${skip}&limit=${limit}`, { token })
+}
+
 export function toggleUserRole(userId, token) {
   return request(`/admin/users/${userId}/role`, { method: 'PATCH', token })
 }

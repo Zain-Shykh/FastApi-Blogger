@@ -11,6 +11,8 @@ import { useAuth } from '../context/AuthContext'
 import { imageUrl } from '../api/client'
 import ImageUploader from '../components/ImageUploader'
 import ErrorBanner from '../components/ErrorBanner'
+import Avatar from '../components/Avatar'
+import Button from '../components/Button'
 
 function SuccessNote({ message }) {
   if (!message) return null
@@ -71,19 +73,25 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-10">
+    <div className="max-w-lg mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
 
-      <section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-slate-900 mb-3">Profile picture</h2>
-        <ImageUploader
-          currentImageUrl={imageUrl(user.image_path)}
-          onUpload={async (file) => setUser(await uploadProfilePicture(user.id, token, file))}
-          onRemove={async () => setUser(await deleteProfilePicture(user.id, token))}
-        />
+        <div className="flex items-center gap-4">
+          <Avatar user={user} size="xl" />
+          <div className="flex-1">
+            <ImageUploader
+              hidePreview
+              currentImageUrl={user.image_file ? imageUrl(user.image_path) : null}
+              onUpload={async (file) => setUser(await uploadProfilePicture(user.id, token, file))}
+              onRemove={async () => setUser(await deleteProfilePicture(user.id, token))}
+            />
+          </div>
+        </div>
       </section>
 
-      <section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-slate-900 mb-3">Profile</h2>
         <form onSubmit={handleProfileSubmit} className="space-y-4">
           <ErrorBanner message={profileError} />
@@ -112,17 +120,13 @@ export default function Settings() {
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
-          <button
-            type="submit"
-            disabled={profileBusy}
-            className="px-4 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
-          >
+          <Button type="submit" disabled={profileBusy}>
             {profileBusy ? 'Saving…' : 'Save profile'}
-          </button>
+          </Button>
         </form>
       </section>
 
-      <section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-slate-900 mb-3">Change password</h2>
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
           <ErrorBanner message={passwordError} />
@@ -154,25 +158,17 @@ export default function Settings() {
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
-          <button
-            type="submit"
-            disabled={passwordBusy}
-            className="px-4 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
-          >
+          <Button type="submit" disabled={passwordBusy}>
             {passwordBusy ? 'Changing…' : 'Change password'}
-          </button>
+          </Button>
         </form>
       </section>
 
-      <section className="border-t border-red-200 pt-6">
+      <section className="rounded-lg border border-red-200 bg-white p-5">
         <h2 className="text-lg font-semibold text-red-700 mb-3">Danger zone</h2>
-        <button
-          type="button"
-          onClick={handleDeleteAccount}
-          className="px-4 py-2 rounded-md border border-red-300 text-red-700 text-sm font-medium hover:bg-red-50"
-        >
+        <Button variant="danger" onClick={handleDeleteAccount}>
           Delete my account
-        </button>
+        </Button>
       </section>
     </div>
   )

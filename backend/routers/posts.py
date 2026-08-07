@@ -53,6 +53,7 @@ def _build_post_response(post:models.Post, likes_map:dict[int, int], comments_ma
         date_posted=post.date_posted,
         author=UserPublic.model_validate(post.author),
         image_path=post.image_path,
+        image_file=post.image_file,
         likes_count=likes_map.get(post.id, 0),
         comments_count=comments_map.get(post.id, 0),
         is_liked_by_me=post.id in liked_ids,
@@ -92,15 +93,20 @@ async def _load_comment_tree(db:AsyncSession, post_id:int) -> list[CommentRespon
 
 
 @router.get("", response_model=PaginatedPostsResponse)
-async def get_posts(db:Annotated[AsyncSession, Depends(get_db)], current_user:OptionalCurrentUser, skip:Annotated[int, Query(ge=0)] = 0, limit: Annotated[int | None, Query(ge=0, le=100)]= None):
+async def get_posts(db:Annotated[AsyncSession, Depends(get_db)], current_user:OptionalCurrentUser, skip:Annotated[int, Query(ge=0)] = 0, limit: Annotated[int | None, Query(ge=0, le=100)]= None, search: Annotated[str | None, Query(max_length=100)] = None):
 
     if limit is None:
         limit = settings.posts_per_page
 
-    count_result = await db.execute(select(func.count()).select_from(models.Post))
+    filters = []
+    if search:
+        pattern = f"%{search}%"
+        filters.append(models.Post.title.ilike(pattern) | models.Post.content.ilike(pattern))
+
+    count_result = await db.execute(select(func.count()).select_from(models.Post).where(*filters))
     total = count_result.scalar() or 0
 
-    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).order_by(models.Post.date_posted.desc()).offset(skip).limit(limit))
+    result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(*filters).order_by(models.Post.date_posted.desc()).offset(skip).limit(limit))
     posts = result.scalars().all()
 
     has_more = skip + len(posts) < total

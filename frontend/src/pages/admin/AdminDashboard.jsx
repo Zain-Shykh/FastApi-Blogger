@@ -1,115 +1,145 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMetrics, getTopPosts, deletePostAsAdmin, toggleUserRole, banUser } from '../../api/admin'
-import { getUser } from '../../api/auth'
+import { getMetrics, getTopPosts, deletePostAsAdmin, toggleUserRole, banUser, listUsers } from '../../api/admin'
 import { useAuth } from '../../context/AuthContext'
 import Spinner from '../../components/Spinner'
 import ErrorBanner from '../../components/ErrorBanner'
+import Avatar from '../../components/Avatar'
+import Button from '../../components/Button'
+import Pagination from '../../components/Pagination'
 
-function MetricCard({ label, value }) {
+function MetricCard({ icon, label, value }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="text-2xl">{icon}</div>
+      <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
       <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-2xl font-bold text-slate-900">{value}</p>
     </div>
   )
 }
 
-function UserLookup({ token }) {
-  const [userId, setUserId] = useState('')
-  const [foundUser, setFoundUser] = useState(null)
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
+const USERS_LIMIT = 8
 
-  async function handleLookup(e) {
-    e.preventDefault()
+function UserModerationTable({ token, currentUserId }) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [skip, setSkip] = useState(0)
+  const [busyId, setBusyId] = useState(null)
+
+  function load() {
+    setLoading(true)
+    listUsers(token, { skip, limit: USERS_LIMIT })
+      .then(setData)
+      .catch((err) => setError(err.detail || err.message))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [token, skip]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleToggleRole(u) {
+    setBusyId(u.id)
     setError('')
-    setFoundUser(null)
-    setBusy(true)
     try {
-      const data = await getUser(userId)
-      setFoundUser(data)
+      await toggleUserRole(u.id, token)
+      setData((d) => ({ ...d, users: d.users.map((x) => (x.id === u.id ? { ...x, is_admin: !x.is_admin } : x)) }))
     } catch (err) {
       setError(err.detail || err.message)
     } finally {
-      setBusy(false)
+      setBusyId(null)
     }
   }
 
-  async function handleToggleRole() {
+  async function handleBan(u) {
+    if (!window.confirm(`Permanently ban ${u.username}? This deletes their account and content.`)) return
+    setBusyId(u.id)
     setError('')
     try {
-      const updated = await toggleUserRole(foundUser.id, token)
-      setFoundUser((u) => ({ ...u, ...updated }))
+      await banUser(u.id, token)
+      setData((d) => ({ ...d, users: d.users.filter((x) => x.id !== u.id), total: d.total - 1 }))
     } catch (err) {
       setError(err.detail || err.message)
-    }
-  }
-
-  async function handleBan() {
-    if (!window.confirm(`Permanently ban ${foundUser.username}?`)) return
-    setError('')
-    try {
-      await banUser(foundUser.id, token)
-      setFoundUser(null)
-      setUserId('')
-    } catch (err) {
-      setError(err.detail || err.message)
+    } finally {
+      setBusyId(null)
     }
   }
 
   return (
     <div>
-      <form onSubmit={handleLookup} className="flex gap-2 mb-3">
-        <input
-          type="number"
-          placeholder="User ID"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          required
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm w-32"
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="px-3 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
-        >
-          Look up
-        </button>
-      </form>
       <ErrorBanner message={error} />
-      {foundUser && (
-        <div className="flex items-center justify-between rounded-md border border-slate-200 p-3">
-          <div>
-            <Link to={`/users/${foundUser.id}`} className="font-medium text-slate-900 hover:text-brand-700">
-              {foundUser.username}
-            </Link>
-            <span className="ml-2 text-xs text-slate-500">{foundUser.is_admin ? 'admin' : 'member'}</span>
+      {loading && <Spinner />}
+      {!loading && data && (
+        <>
+          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
+                <tr>
+                  <th className="px-4 py-2">User</th>
+                  <th className="px-4 py-2 hidden sm:table-cell">Email</th>
+                  <th className="px-4 py-2">Posts</th>
+                  <th className="px-4 py-2">Role</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.users.map((u) => (
+                  <tr key={u.id}>
+                    <td className="px-4 py-2">
+                      <Link to={`/users/${u.id}`} className="flex items-center gap-2 hover:text-brand-700">
+                        <Avatar user={u} size="sm" />
+                        <span className="font-medium text-slate-900">{u.username}</span>
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-slate-500 hidden sm:table-cell">{u.email}</td>
+                    <td className="px-4 py-2 text-slate-500">{u.post_count}</td>
+                    <td className="px-4 py-2">
+                      {u.is_admin ? (
+                        <span className="text-xs font-medium bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                          admin
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">member</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {u.id === currentUserId ? (
+                        <span className="text-xs text-slate-400">you</span>
+                      ) : (
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            variant="warning"
+                            size="sm"
+                            disabled={busyId === u.id}
+                            onClick={() => handleToggleRole(u)}
+                          >
+                            {u.is_admin ? 'Revoke' : 'Promote'}
+                          </Button>
+                          <Button variant="danger" size="sm" disabled={busyId === u.id} onClick={() => handleBan(u)}>
+                            Ban
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleToggleRole}
-              className="px-3 py-1.5 rounded-md border border-slate-300 text-sm hover:bg-slate-100"
-            >
-              {foundUser.is_admin ? 'Revoke admin' : 'Make admin'}
-            </button>
-            <button
-              type="button"
-              onClick={handleBan}
-              className="px-3 py-1.5 rounded-md border border-red-300 text-red-700 text-sm hover:bg-red-50"
-            >
-              Ban
-            </button>
-          </div>
-        </div>
+          <Pagination
+            skip={data.skip}
+            limit={data.limit}
+            total={data.total}
+            hasMore={data.has_more}
+            onPageChange={setSkip}
+          />
+        </>
       )}
     </div>
   )
 }
 
 export default function AdminDashboard() {
-  const { token } = useAuth()
+  const { user, token } = useAuth()
   const [metrics, setMetrics] = useState(null)
   const [topPosts, setTopPosts] = useState(null)
   const [error, setError] = useState('')
@@ -147,11 +177,11 @@ export default function AdminDashboard() {
         <section>
           <h2 className="text-lg font-semibold text-slate-900 mb-3">Platform metrics</h2>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <MetricCard label="Users" value={metrics.total_users} />
-            <MetricCard label="Admins" value={metrics.total_admins} />
-            <MetricCard label="Posts" value={metrics.total_posts} />
-            <MetricCard label="Comments" value={metrics.total_comments} />
-            <MetricCard label="Likes" value={metrics.total_likes} />
+            <MetricCard icon="👥" label="Users" value={metrics.total_users} />
+            <MetricCard icon="🛡️" label="Admins" value={metrics.total_admins} />
+            <MetricCard icon="📝" label="Posts" value={metrics.total_posts} />
+            <MetricCard icon="💬" label="Comments" value={metrics.total_comments} />
+            <MetricCard icon="♥" label="Likes" value={metrics.total_likes} />
           </div>
         </section>
       )}
@@ -167,16 +197,12 @@ export default function AdminDashboard() {
                     {post.title}
                   </Link>
                   <p className="text-xs text-slate-500">
-                    {post.likes_count} likes · {new Date(post.date_posted).toLocaleDateString()}
+                    ♥ {post.likes_count} · {new Date(post.date_posted).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDeletePost(post.id)}
-                  className="px-3 py-1.5 rounded-md border border-red-300 text-red-700 text-sm hover:bg-red-50"
-                >
+                <Button variant="danger" size="sm" onClick={() => handleDeletePost(post.id)}>
                   Delete
-                </button>
+                </Button>
               </div>
             ))}
             {topPosts.length === 0 && <p className="p-3 text-sm text-slate-500">No posts yet.</p>}
@@ -186,11 +212,7 @@ export default function AdminDashboard() {
 
       <section>
         <h2 className="text-lg font-semibold text-slate-900 mb-3">User moderation</h2>
-        <p className="text-sm text-slate-500 mb-3">
-          Look up a user by ID to promote, demote, or ban them. (You can also moderate a user directly from
-          their profile page.)
-        </p>
-        <UserLookup token={token} />
+        <UserModerationTable token={token} currentUserId={user.id} />
       </section>
     </div>
   )

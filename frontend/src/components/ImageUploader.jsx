@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import ErrorBanner from './ErrorBanner'
 
-export default function ImageUploader({ currentImageUrl, onUpload, onRemove, label = 'Image' }) {
+export default function ImageUploader({ currentImageUrl, onUpload, onRemove, label = 'Image', hidePreview = false }) {
   const inputRef = useRef(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -37,7 +37,7 @@ export default function ImageUploader({ currentImageUrl, onUpload, onRemove, lab
     <div>
       <ErrorBanner message={error} />
       <p className="text-sm font-medium text-slate-700 mb-2">{label}</p>
-      {currentImageUrl && (
+      {!hidePreview && currentImageUrl && (
         <img src={currentImageUrl} alt="" className="w-full max-w-xs rounded-md mb-2 object-cover" />
       )}
       <div className="flex items-center gap-2">

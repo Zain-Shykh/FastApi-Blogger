@@ -5,6 +5,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 from config import settings
 
+
+def _public_object_url(prefix:str, filename:str) -> str:
+    # settings.s3_endpoint_url is the S3-protocol endpoint (".../storage/v1/s3"), used by boto3.
+    # The public HTTP URL for an object lives at ".../storage/v1/object/public/<bucket>/<key>" —
+    # note no "/s3" segment — so it must be stripped before building the public URL.
+    base = (settings.s3_endpoint_url or "").removesuffix("/s3")
+    return f"{base}/object/public/{settings.s3_bucket_name}/{prefix}/{filename}"
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -23,7 +32,7 @@ class User(Base):
     @property
     def image_path(self)->str:
         if self.image_file:
-            return f"{settings.s3_endpoint_url}/storage/v1/object/public/{settings.s3_bucket_name}/{self.image_file}"
+            return _public_object_url("profile_images", self.image_file)
         return "/media/profile_pics/default.jpg"
 
 
@@ -43,7 +52,7 @@ class Post(Base):
     @property
     def image_path(self)->str:
         if self.image_file:
-            return f"{settings.s3_endpoint_url}/storage/v1/object/public/{settings.s3_bucket_name}/{self.image_file}"
+            return _public_object_url("post", self.image_file)
         return "/media/thumbnails/default.jpg"
 
 class PasswordResetToken(Base):

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ErrorBanner from './ErrorBanner'
+import Button from './Button'
 
 export default function PostForm({ initialTitle = '', initialContent = '', onSubmit, submitLabel }) {
   const [title, setTitle] = useState(initialTitle)
@@ -52,13 +53,9 @@ export default function PostForm({ initialTitle = '', initialContent = '', onSub
           className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
-      <button
-        type="submit"
-        disabled={busy}
-        className="px-4 py-2 rounded-md bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
-      >
+      <Button type="submit" disabled={busy}>
         {busy ? 'Saving…' : submitLabel}
-      </button>
+      </Button>
     </form>
   )
 }

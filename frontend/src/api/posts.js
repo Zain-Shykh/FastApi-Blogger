@@ -1,8 +1,9 @@
 import { request } from './client'
 
-export function getPosts({ skip = 0, limit } = {}, token) {
+export function getPosts({ skip = 0, limit, search } = {}, token) {
   const params = new URLSearchParams({ skip: String(skip) })
   if (limit) params.set('limit', String(limit))
+  if (search) params.set('search', search)
   return request(`/posts?${params.toString()}`, { token })
 }
 
