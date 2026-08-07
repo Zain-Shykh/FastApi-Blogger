@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 import models
 from database import get_db
-from schemas import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse, CommentCreate, CommentResponse
-from auth import CurrentUser
+from schemas import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse, CommentCreate, CommentResponse, UserPublic
+from auth import CurrentUser, OptionalCurrentUser
 from config import settings
 from imageutils import delete_post_thumbnail, process_post_thumbnail, upload_post_thumbnail
 from starlette.concurrency import run_in_threadpool
@@ -16,23 +16,100 @@ from botocore.exceptions import ClientError
 router = APIRouter()
 
 
+async def _get_engagement_maps(db:AsyncSession, post_ids:list[int], user_id:int|None) -> tuple[dict[int, int], dict[int, int], set[int]]:
+    if not post_ids:
+        return {}, {}, set()
+
+    likes_result = await db.execute(
+        select(models.Like.post_id, func.count(models.Like.id))
+        .where(models.Like.post_id.in_(post_ids))
+        .group_by(models.Like.post_id)
+    )
+    likes_map = dict(likes_result.all())
+
+    comments_result = await db.execute(
+        select(models.Comment.post_id, func.count(models.Comment.id))
+        .where(models.Comment.post_id.in_(post_ids))
+        .group_by(models.Comment.post_id)
+    )
+    comments_map = dict(comments_result.all())
+
+    liked_ids: set[int] = set()
+    if user_id is not None:
+        liked_result = await db.execute(
+            select(models.Like.post_id).where(models.Like.post_id.in_(post_ids), models.Like.user_id == user_id)
+        )
+        liked_ids = set(liked_result.scalars().all())
+
+    return likes_map, comments_map, liked_ids
+
+
+def _build_post_response(post:models.Post, likes_map:dict[int, int], comments_map:dict[int, int], liked_ids:set[int]) -> PostResponse:
+    return PostResponse(
+        id=post.id,
+        title=post.title,
+        content=post.content,
+        user_id=post.user_id,
+        date_posted=post.date_posted,
+        author=UserPublic.model_validate(post.author),
+        image_path=post.image_path,
+        likes_count=likes_map.get(post.id, 0),
+        comments_count=comments_map.get(post.id, 0),
+        is_liked_by_me=post.id in liked_ids,
+    )
+
+
+async def _build_single_post_response(db:AsyncSession, post:models.Post, user_id:int|None) -> PostResponse:
+    likes_map, comments_map, liked_ids = await _get_engagement_maps(db, [post.id], user_id)
+    return _build_post_response(post, likes_map, comments_map, liked_ids)
+
+
+async def _load_comment_tree(db:AsyncSession, post_id:int) -> list[CommentResponse]:
+    result = await db.execute(
+        select(models.Comment)
+        .options(selectinload(models.Comment.user))
+        .where(models.Comment.post_id == post_id)
+        .order_by(models.Comment.date_posted.asc())
+    )
+    all_comments = result.scalars().all()
+
+    children_map: dict[int|None, list[models.Comment]] = {}
+    for comment in all_comments:
+        children_map.setdefault(comment.parent_id, []).append(comment)
+
+    def build(comment:models.Comment) -> CommentResponse:
+        return CommentResponse(
+            id=comment.id,
+            content=comment.content,
+            date_posted=comment.date_posted,
+            user=UserPublic.model_validate(comment.user),
+            post_id=comment.post_id,
+            parent_id=comment.parent_id,
+            replies=[build(child) for child in children_map.get(comment.id, [])],
+        )
+
+    return [build(comment) for comment in children_map.get(None, [])]
+
 
 @router.get("", response_model=PaginatedPostsResponse)
-async def get_posts(db:Annotated[AsyncSession, Depends(get_db)], skip:Annotated[int, Query(ge=0)] = 0, limit: Annotated[int | None, Query(ge=0, le=100)]= None):
-    
+async def get_posts(db:Annotated[AsyncSession, Depends(get_db)], current_user:OptionalCurrentUser, skip:Annotated[int, Query(ge=0)] = 0, limit: Annotated[int | None, Query(ge=0, le=100)]= None):
+
     if limit is None:
         limit = settings.posts_per_page
 
     count_result = await db.execute(select(func.count()).select_from(models.Post))
     total = count_result.scalar() or 0
-    
+
     result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).order_by(models.Post.date_posted.desc()).offset(skip).limit(limit))
     posts = result.scalars().all()
 
     has_more = skip + len(posts) < total
 
+    user_id = current_user.id if current_user else None
+    likes_map, comments_map, liked_ids = await _get_engagement_maps(db, [post.id for post in posts], user_id)
+
     return PaginatedPostsResponse(
-        posts=[PostResponse.model_validate(post) for post in posts],
+        posts=[_build_post_response(post, likes_map, comments_map, liked_ids) for post in posts],
         total = total,
         skip = skip,
         limit = limit,
@@ -48,17 +125,27 @@ async def create_post(post:PostCreate, current_user:CurrentUser, db:Annotated[As
     )
     db.add(new_post)
     await db.commit()
-    await db.refresh(new_post)
-    return new_post
+    await db.refresh(new_post, attribute_names=["author"])
+    return _build_post_response(new_post, {}, {}, set())
 
 
 @router.get("/{id}", response_model=PostResponse)
-async def get_post(id: int, db:Annotated[AsyncSession, Depends(get_db)]):
+async def get_post(id: int, db:Annotated[AsyncSession, Depends(get_db)], current_user:OptionalCurrentUser):
     result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(models.Post.id == id))
     post = result.scalars().first()
-    if post:
-        return post
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} was not found")
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} was not found")
+    user_id = current_user.id if current_user else None
+    return await _build_single_post_response(db, post, user_id)
+
+
+@router.get("/{id}/comments", response_model=list[CommentResponse])
+async def get_post_comments(id:int, db:Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.Post).where(models.Post.id == id))
+    post = result.scalars().first()
+    if not post:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"post with id: {id} was not found")
+    return await _load_comment_tree(db, id)
     
 
 @router.put("/{id}", response_model=PostResponse)
@@ -76,8 +163,8 @@ async def update_post_full(id: int, newPost:PostCreate,current_user:CurrentUser,
 
     await db.commit()
     await db.refresh(post, attribute_names=["author"])
-    return post
-    
+    return await _build_single_post_response(db, post, current_user.id)
+
 
 @router.patch("/{id}", response_model=PostResponse)
 async def update_post_partial(id: int, newPost:PostUpdate, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
@@ -92,11 +179,11 @@ async def update_post_partial(id: int, newPost:PostUpdate, current_user:CurrentU
     newData = newPost.model_dump(exclude_unset=True)
     for field, value in newData.items():
         setattr(post, field, value)
-    
+
     await db.commit()
     await db.refresh(post, attribute_names=["author"])
-    return post
-    
+    return await _build_single_post_response(db, post, current_user.id)
+
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_post(id:int,current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.Post).options(selectinload(models.Post.author)).where(models.Post.id == id))
@@ -146,8 +233,8 @@ async def upload_post_image(id:int, image_file:UploadFile, current_user:CurrentU
 
     if old_file_name:
         await delete_post_thumbnail(old_file_name)
-    
-    return post
+
+    return await _build_single_post_response(db, post, current_user.id)
 
 
 @router.delete("/{id}/image", response_model=PostResponse)
@@ -173,7 +260,7 @@ async def delete_post_image(id:int, current_user:CurrentUser, db:Annotated[Async
     if old_file_name:
         await delete_post_thumbnail(old_file_name)
 
-    return post
+    return await _build_single_post_response(db, post, current_user.id)
 
 
 @router.post("/{id}/like", status_code=status.HTTP_200_OK)
@@ -210,12 +297,20 @@ async def create_comment(id: int, comment: CommentCreate, current_user: CurrentU
     db.add(new_comment)
     await db.commit()
     await db.refresh(new_comment, attribute_names=["user"])
-    return new_comment
+    return CommentResponse(
+        id=new_comment.id,
+        content=new_comment.content,
+        date_posted=new_comment.date_posted,
+        user=UserPublic.model_validate(new_comment.user),
+        post_id=new_comment.post_id,
+        parent_id=new_comment.parent_id,
+        replies=[],
+    )
 
 
 @router.delete("/{post_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(post_id: int, comment_id: int, current_user: CurrentUser, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Comment).where(models.Comment.id == comment_id and models.Comment.post_id == post_id))
+    result = await db.execute(select(models.Comment).where(models.Comment.id == comment_id, models.Comment.post_id == post_id))
     comment = result.scalars().first()
 
     if not comment:
@@ -240,5 +335,13 @@ async def create_reply(post_id: int, comment_id: int, reply: CommentCreate, curr
     db.add(new_reply)
     await db.commit()
     await db.refresh(new_reply, attribute_names=["user"])
-    return new_reply
+    return CommentResponse(
+        id=new_reply.id,
+        content=new_reply.content,
+        date_posted=new_reply.date_posted,
+        user=UserPublic.model_validate(new_reply.user),
+        post_id=new_reply.post_id,
+        parent_id=new_reply.parent_id,
+        replies=[],
+    )
 

@@ -1,4 +1,39 @@
-myenv/
+# --- Python / backend ---
 __pycache__/
+*.py[cod]
+*.egg-info/
+myenv/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+*.db
+*.sqlite3
+
+# --- Environment / secrets ---
 .env
-.db
+.env.local
+.env.*.local
+
+# --- Media uploads (local dev only; production uses S3) ---
+backend/media/profile_pics/*
+backend/media/thumbnail/*
+!backend/media/profile_pics/.gitkeep
+!backend/media/thumbnail/.gitkeep
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+npm-debug.log*

@@ -12,7 +12,7 @@ from database import get_db, engine
 from contextlib import asynccontextmanager
 from fastapi.exception_handlers import (http_exception_handler, request_validation_exception_handler)
 from fastapi.requests import Request
-from routers import users, posts
+from routers import users, posts, admin
 
 @asynccontextmanager
 async def lifespan(_app:FastAPI):
@@ -20,10 +20,11 @@ async def lifespan(_app:FastAPI):
     await engine.dispose()
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/media", StaticFiles(directory="media"), name="media")
 
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(posts.router, prefix="/posts", tags=["posts"])
+app.include_router(admin.router)
 
 @app.get("/")
 def root():

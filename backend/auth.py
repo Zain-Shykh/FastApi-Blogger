@@ -15,6 +15,7 @@ import secrets
 
 password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/token")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/users/token", auto_error=False)
 
 def hash_password(password:str)->str:
     return password_hash.hash(password)
@@ -74,8 +75,26 @@ async def get_current_admin_user(current_user:Annotated[models.User, Depends(get
     return current_user
 
 
+async def get_optional_current_user(token:Annotated[str|None, Depends(oauth2_scheme_optional)], db:Annotated[AsyncSession, Depends(get_db)])->models.User|None:
+    if not token:
+        return None
+
+    user_id = verify_access_token(token)
+    if user_id is None:
+        return None
+
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        return None
+
+    result = await db.execute(select(models.User).where(models.User.id == user_id_int))
+    return result.scalars().first()
+
+
 CurrentUser = Annotated[models.User, Depends(get_current_user)]
 CurrentAdminUser = Annotated[models.User, Depends(get_current_admin_user)]
+OptionalCurrentUser = Annotated[models.User | None, Depends(get_optional_current_user)]
 
 
 

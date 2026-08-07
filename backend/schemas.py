@@ -15,6 +15,7 @@ class UserPublic(UserBase):
     username:str
     image_path:str
     image_file:str|None
+    is_admin:bool
 
 class UserPrivate(UserPublic):
     email:EmailStr
@@ -41,6 +42,9 @@ class PostResponse(PostBase):
     date_posted:datetime
     author:UserPublic
     image_path:str
+    likes_count:int = 0
+    comments_count:int = 0
+    is_liked_by_me:bool = False
 
 class PostUpdate(BaseModel):
     title:str | None = Field(default=None, min_length=1, max_length=100)

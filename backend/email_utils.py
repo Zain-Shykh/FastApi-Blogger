@@ -29,7 +29,7 @@ async def send_email(to_email:str, subject:str, plain_text:str, html_content:str
 async def send_password_reset_email(to_email:str, username:str, token:str)->None:
     reset_url = f"{settings.frontend_url}/reset-password?token={token}"
 
-    template = templates.env.get_template("password_reset_email.html")
+    template = templates.env.get_template("email/password_reset.html")
     html_content = template.render(username=username, reset_url=reset_url)
 
     plain_text = f"""HI {username},

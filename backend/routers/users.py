@@ -8,7 +8,8 @@ from database import get_db
 from schemas import PostResponse, UserCreate, UserPublic, UserUpdate, UserPrivate, Token, PaginatedPostsResponse, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
 from datetime import timedelta, UTC, datetime
 from fastapi.security import OAuth2PasswordRequestForm
-from auth import hash_password, verify_password, create_access_token, CurrentUser, generate_reset_token, hash_reset_token
+from auth import hash_password, verify_password, create_access_token, CurrentUser, OptionalCurrentUser, generate_reset_token, hash_reset_token
+from routers.posts import _get_engagement_maps, _build_post_response
 from config import settings
 from PIL import UnidentifiedImageError
 from imageutils import delete_profile_image, process_profile_image, upload_profile_image
@@ -176,8 +177,8 @@ async def update_user_partial(id: int, newUserData:UserUpdate,current_user:Curre
     return user
 
 @router.get("/{user_id}", response_model=UserPublic)
-async def get_user(userid:int, db:Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.User).where(models.User.id == userid),)
+async def get_user(user_id:int, db:Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.User).where(models.User.id == user_id),)
 
     user = result.scalars().first()
 
@@ -187,11 +188,11 @@ async def get_user(userid:int, db:Annotated[AsyncSession, Depends(get_db)]):
 
 
 @router.delete("/{userid}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(id:int, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.User).where(models.User.id == id))
+async def delete_user(userid:int, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
+    result = await db.execute(select(models.User).where(models.User.id == userid))
     user = result.scalars().first()
 
-    if id != current_user.id:
+    if userid != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="you are not authorized to delete this user")
 
     if not user:
@@ -207,7 +208,7 @@ async def delete_user(id:int, current_user:CurrentUser, db:Annotated[AsyncSessio
 
 
 @router.get("/{user_id}/posts", response_model=PaginatedPostsResponse)
-async def get_user_posts(user_id:int, db:Annotated[AsyncSession, Depends(get_db)], skip:Annotated[int, Query(ge=0)] = 0, limit: Annotated[int | None, Query(ge=1, le=100)] = None):
+async def get_user_posts(user_id:int, db:Annotated[AsyncSession, Depends(get_db)], current_user:OptionalCurrentUser, skip:Annotated[int, Query(ge=0)] = 0, limit: Annotated[int | None, Query(ge=1, le=100)] = None):
     if limit is None:
         limit = settings.posts_per_page
 
@@ -216,7 +217,7 @@ async def get_user_posts(user_id:int, db:Annotated[AsyncSession, Depends(get_db)
 
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not Found.")
-    
+
     count_result = await db.execute(select(func.count()).select_from(models.Post).where(models.Post.user_id == user_id))
     total = count_result.scalar() or 0
 
@@ -224,8 +225,11 @@ async def get_user_posts(user_id:int, db:Annotated[AsyncSession, Depends(get_db)
     posts = result.scalars().all()
     has_more = skip + len(posts) < total
 
+    requester_id = current_user.id if current_user else None
+    likes_map, comments_map, liked_ids = await _get_engagement_maps(db, [post.id for post in posts], requester_id)
+
     return PaginatedPostsResponse(
-        posts=[PostResponse.model_validate(post) for post in posts],
+        posts=[_build_post_response(post, likes_map, comments_map, liked_ids) for post in posts],
         total = total,
         skip = skip,
         limit = limit,
@@ -234,8 +238,8 @@ async def get_user_posts(user_id:int, db:Annotated[AsyncSession, Depends(get_db)
 
 
 @router.patch("/{userid}/picture", response_model=UserPrivate)
-async def upload_profile_picture(user_id:int, file:UploadFile, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
-    if current_user != user_id:
+async def upload_profile_picture(userid:int, file:UploadFile, current_user:CurrentUser, db:Annotated[AsyncSession, Depends(get_db)]):
+    if current_user.id != userid:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this picture")
     
     content = await file.read()

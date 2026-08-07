@@ -37,8 +37,8 @@ class Post(Base):
     image_file: Mapped[str|None] = mapped_column(String(200), nullable=True, default=None)
 
     author: Mapped[User] = relationship(back_populates="posts")
-    likes: Mapped[list[Like]] = relationship(back_populates="post")
-    comments: Mapped[list[Comment]] = relationship(back_populates="post")
+    likes: Mapped[list[Like]] = relationship(back_populates="post", cascade="all, delete-orphan")
+    comments: Mapped[list[Comment]] = relationship(back_populates="post", cascade="all, delete-orphan")
 
     @property
     def image_path(self)->str:
